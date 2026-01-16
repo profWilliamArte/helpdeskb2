@@ -1,0 +1,142 @@
+GUÍA COMPLETA PARA CONFIGURAR SUPABASE (Paso a Paso)
+
+🎯 OBJETIVO DE ESTA ETAPA
+Configurar completamente Supabase: base de datos, autenticación, políticas de seguridad y preparar el backend para nuestro HelpDesk.
+
+📋 CHECKLIST PREVIO
+    Tener cuenta de GitHub o email
+    Proyecto React funcionando (localhost:3000)
+
+PASO 1: CREAR CUENTA SUPABASE
+    1.1 Registro inicial
+    Abrir supabase.com
+
+Click en "Start your project" (esquina superior derecha)
+
+
+1.2 Métodos de registro
+    RECOMENDADO: Cuenta de GitHub (1-click, sin contraseña)
+
+    Click en "Continue with GitHub" 
+        Autorizar aplicación
+        ✅ Listo en 5 segundos
+
+    Email: tu_email@ejemplo.com
+        Password: [crear una segura]
+        Click en "Create account"
+        ✅ Verificar email (revisar bandeja/spam)
+
+
+🚀 PASO 2: CREAR PROYECTO
+
+    2.1 Nuevo proyecto
+    Click en "New Project"
+
+    Completar formulario:
+
+    Campo	                Valor	                    Notas
+    Name	                helpdeskb	                Identificador único
+    Database Password	    OeeP6vvPTbt38wX8	        ¡GUARDAR ESTO!
+    Region	                South America (São Paulo)	Más cercano a LATAM
+    Plan	                Free	                    Para desarrollo
+
+
+    helpdeskB
+    jHfDmU9gd97arrR0
+
+🔑 PASO 3: OBTENER CREDENCIALES
+
+        3.1 Navegar a API Settings
+        Menú izquierdo → Settings (⚙️)
+
+        Copiar estos dos valores:
+
+            Click en Data API
+                # URL del proyecto (SUPABASE_URL)
+                Project URL: https://xxxxxxxxxxxx.supabase.co
+                              
+
+            Click en API Keys (Name	API Key)
+                # Llave pública (SUPABASE_ANON_KEY)
+                anon public: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                                
+
+        3.2 Crear archivo .env.local
+        En la raíz de tu proyecto React:
+
+            # .env.local
+            VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+            VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+            ⚠️ IMPORTANTE:
+                El archivo debe llamarse .env.local (no .env)
+                Variables deben empezar con VITE_
+                No usar comillas
+                No agregar espacios
+
+👤 PASO 4: CONFIGURAR AUTENTICACIÓN  
+    4.1 Habilitar Email Sign-in
+    Menú izquierdo → Authentication
+
+        Click en Providers
+        En "Email" → Activar:   
+
+        [✓] Enable email sign-in
+        [ ] Enable confirm email  # ← DESACTIVAR para desarrollo  
+    
+    4.2 Configurar URLs (CRÍTICO)
+        Click en URL Configuration
+
+        Agregar estas URLs:
+        Site URL: http://localhost:3000
+
+        Redirect URLs (adicionales):
+        - http://localhost:3000/dashboard
+        - http://localhost:3000/login
+        - http://localhost:3000/register
+        - http://localhost:3000
+
+🐘 PASO 5: CREAR BASE DE DATOS
+    5.1 SQL Editor
+    Menú izquierdo → SQL Editor
+
+    Click en New query (botón verde)
+
+    5.2 Ejecutar script completo
+
+    ***********************************************
+    Copiar y pegar el código que esta en (primera parte basededatos.txt) !!!! 
+
+    Revisar la descripcion de cada tabla y sus relaciones (Ultima parte del archivo basededatos.txt)
+    ************************************************
+     
+5.3 Ejecutar script
+Click en Run (▷ botón verde)
+
+Esperar mensaje "Success"
+
+Verificar en Table Editor → Deben aparecer 5 tablas
+
+🧪 PASO 6: PRUEBAS INICIALES
+
+    6.1 Crear usuario manual
+        Authentication → Users
+
+        Click en Add User
+
+        Completar:
+            Email: estudiante@helpdesk.com
+            Password: estudiante123
+
+            Click en Create User
+    
+    6.2 Verificar en SQL
+        -- Ver usuarios creados
+            SELECT id, email, created_at 
+            FROM auth.users 
+            ORDER BY created_at DESC;
+
+            -- Ver perfiles automáticos
+            SELECT id, email, role 
+            FROM profiles 
+            ORDER BY created_at DESC;
