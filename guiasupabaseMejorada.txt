@@ -144,4 +144,4 @@ Configurar un proyecto Supabase listo para:
 🛡️ PASO 7 (OPCIONAL PERO RECOMENDADO): PROBAR RLS
 
         Ejecuta esta consulta sin estar autenticado (en SQL Editor):
-        SELECT * FROM tickets;
+        SELECT * FROM tickets; y las demas
