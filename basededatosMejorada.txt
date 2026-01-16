@@ -1,0 +1,229 @@
+-- =============================================
+-- SISTEMA HELPDESK - ESQUEMA COMPLETO
+-- Compatible con Supabase (PostgreSQL 15+)
+-- =============================================
+
+-- 1. EXTENSIÓN NECESARIA (si no está activa)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. TABLA: profiles
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT,
+  role TEXT DEFAULT 'user' CHECK (role IN ('admin', 'agent', 'user')),
+  avatar_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+-- 3. TABLA: categories
+CREATE TABLE IF NOT EXISTS categories (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  color TEXT DEFAULT '#2563eb',
+  icon TEXT DEFAULT 'help-circle',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+-- 4. TABLA: tickets
+CREATE TABLE IF NOT EXISTS tickets (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+  priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+  
+  -- Relaciones
+  created_by UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  assigned_to UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+  
+  -- Fechas
+  due_date TIMESTAMP WITH TIME ZONE,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  
+  -- Módulo específico
+  module TEXT DEFAULT 'support' CHECK (module IN ('purchases', 'errors', 'support', 'other')),
+  purchase_details JSONB DEFAULT '{}'::jsonb,
+  error_details JSONB DEFAULT '{}'::jsonb,
+  
+  -- Metadatos
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+-- 5. TABLA: comments
+CREATE TABLE IF NOT EXISTS comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  content TEXT NOT NULL,
+  is_internal BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+-- 6. TABLA: ticket_history
+CREATE TABLE IF NOT EXISTS ticket_history (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE NOT NULL,
+  changed_by UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  field_changed TEXT NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  change_date TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+-- =============================================
+-- DATOS INICIALES
+-- =============================================
+INSERT INTO categories (name, description, color, icon) VALUES
+  ('Error de Sistema', 'Problemas técnicos y bugs del sistema', '#ef4444', 'bug'),
+  ('Solicitud de Compra', 'Compra de materiales, equipos o servicios', '#10b981', 'shopping-cart'),
+  ('Soporte Técnico', 'Asistencia con software, hardware o red', '#3b82f6', 'headphones'),
+  ('Desarrollo', 'Nuevas funcionalidades o mejoras', '#8b5cf6', 'code'),
+  ('General', 'Otras solicitudes no categorizadas', '#6b7280', 'help-circle')
+ON CONFLICT (name) DO NOTHING;
+
+-- =============================================
+-- ÍNDICES (Optimización de consultas)
+-- =============================================
+CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+CREATE INDEX IF NOT EXISTS idx_tickets_priority ON tickets(priority);
+CREATE INDEX IF NOT EXISTS idx_tickets_created_by ON tickets(created_by);
+CREATE INDEX IF NOT EXISTS idx_tickets_assigned_to ON tickets(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_tickets_due_date ON tickets(due_date);
+CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON tickets(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_comments_ticket_id ON comments(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_history_ticket_id ON ticket_history(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_history_change_date ON ticket_history(change_date DESC);
+
+-- =============================================
+-- FUNCIONES Y TRIGGERS
+-- =============================================
+
+-- Auto-actualizar updated_at en tickets
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_update_tickets_updated_at
+BEFORE UPDATE ON tickets
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- Crear perfil automáticamente al registrarse
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, created_at)
+  VALUES (NEW.id, NEW.email, NOW())
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger en auth.users
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW
+EXECUTE FUNCTION public.handle_new_user();
+
+-- =============================================
+-- SEGURIDAD: RLS (Row Level Security)
+-- =============================================
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket_history ENABLE ROW LEVEL SECURITY;
+
+-- PROFILES
+CREATE POLICY "Perfiles visibles para todos" ON profiles
+  FOR SELECT USING (true);
+
+CREATE POLICY "Usuarios editan su propio perfil" ON profiles
+  FOR UPDATE USING (auth.uid() = id);
+
+-- CATEGORIES
+CREATE POLICY "Categorías visibles para todos" ON categories
+  FOR SELECT USING (true);
+
+-- TICKETS
+CREATE POLICY "Tickets visibles para todos" ON tickets
+  FOR SELECT USING (true);
+
+CREATE POLICY "Crear tickets solo si eres el creador" ON tickets
+  FOR INSERT WITH CHECK (auth.uid() = created_by);
+
+CREATE POLICY "Actualizar tickets si eres creador, asignado o admin/agent" ON tickets
+  FOR UPDATE USING (
+    auth.uid() = created_by OR 
+    auth.uid() = assigned_to OR
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() AND role IN ('admin', 'agent')
+    )
+  );
+
+-- COMMENTS
+CREATE POLICY "Ver comentarios autorizados" ON comments
+  FOR SELECT USING (
+    NOT is_internal OR 
+    auth.uid() = user_id OR
+    auth.uid() IN (
+      SELECT created_by FROM tickets WHERE id = ticket_id
+      UNION
+      SELECT assigned_to FROM tickets WHERE id = ticket_id
+    ) OR
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() AND role IN ('admin', 'agent')
+    )
+  );
+
+CREATE POLICY "Crear comentarios si tienes acceso al ticket" ON comments
+  FOR INSERT WITH CHECK (
+    auth.uid() IN (
+      SELECT created_by FROM tickets WHERE id = ticket_id
+      UNION
+      SELECT assigned_to FROM tickets WHERE id = ticket_id
+    ) OR
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() AND role IN ('admin', 'agent')
+    )
+  );
+
+-- TICKET_HISTORY
+CREATE POLICY "Historial visible solo para participantes o admins" ON ticket_history
+  FOR SELECT USING (
+    auth.uid() IN (
+      SELECT created_by FROM tickets WHERE id = ticket_id
+      UNION
+      SELECT assigned_to FROM tickets WHERE id = ticket_id
+    ) OR
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() AND role IN ('admin', 'agent')
+    )
+  );
+
+-- Solo el sistema o triggers deben insertar en historial → política restrictiva
+CREATE POLICY "Solo sistema puede escribir historial" ON ticket_history
+  FOR INSERT WITH CHECK (false);  -- Bloqueado desde frontend; se usa desde backend o función
+
+-- =============================================
+-- PERMISOS ADICIONALES (requeridos para SECURITY DEFINER)
+-- =============================================
+GRANT USAGE ON SCHEMA public TO supabase_auth_admin;
+GRANT SELECT ON TABLE profiles TO supabase_auth_admin;
