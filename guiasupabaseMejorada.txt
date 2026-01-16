@@ -1,0 +1,147 @@
+
+
+📘 GUÍA COMPLETA: CONFIGURACIÓN DE SUPABASE PARA HELPDESK PRO
+  
+🎯 OBJETIVO
+
+Configurar un proyecto Supabase listo para:
+
+    Autenticación de usuarios (email/password)
+    Almacenamiento seguro de datos (tickets, perfiles, etc.)
+    Integración con React + Vite
+    Cumplir con Row Level Security (RLS) desde el inicio
+
+✅ CHECKLIST PREVIO
+    Tener cuenta de GitHub o email válido
+    Proyecto React con Vite funcionando en http://localhost:5173 
+    Editor de código (VS Code recomendado)
+
+
+🔐 PASO 1: CREAR CUENTA EN SUPABASE
+
+    1.1 Registro
+        Ir a https://supabase.com
+        Click en "Start your project" (esquina superior derecha)
+
+    1.2 Método de registro
+        ✅ Recomendado: GitHub (más rápido, sin gestión de contraseñas)
+        Click en "Continue with GitHub"
+        Autoriza la app → ¡listo en segundos!
+
+    Alternativa: Email
+        Ingresa email y contraseña segura
+        Verifica tu correo (revisa spam)
+
+    💡 Consejo para estudiantes: Usar GitHub evita problemas de "olvido de contraseña" en entornos de aprendizaje.
+
+
+🚀 PASO 2: CREAR PROYECTO
+
+    2.1 Configuración del proyecto
+        Click en "New Project"
+
+        Completa:
+        ---------------------------------------------------------------------------------------
+        Campo                       Valor sugerido                  Notas
+        ---------------------------------------------------------------------------------------
+        Name                        helpdeskb                       Nombre único, sin espacios
+        Database Password           jHfDmU9xxxxxxx                  ¡GUÁRDALA EN UN LUGAR SEGURO! Es la contraseña del superusuario postgres.
+        Region                      South America (São Paulo)       Ideal para LATAM
+        Plan                        Free                            Suficiente para desarrollo
+
+        ⚠️ Importante: La contraseña de la base de datos NO es la misma que la clave API. No se usa en el frontend.
+
+
+🔑 PASO 3: OBTENER CREDENCIALES DE API
+
+        3.1 Acceder a Settings → API
+            En el panel izquierdo: Settings (⚙️) → API
+            Copia estos dos valores:
+                Project URL → https://xxxxxxxxxxxx.supabase.co
+                anon public key → eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+            3.2 Crear archivo .env.local
+            En la raíz de tu proyecto React/Vite:
+
+                # .env.local
+                VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+                VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    ✅ Reglas obligatorias:
+        .- El archivo debe llamarse .env.local (no .env)
+        .- Las variables deben empezar con VITE_ (para que Vite las exponga al frontend)
+        .- Sin comillas, sin espacios alrededor del =
+        .- Nunca commitear este archivo → añadir a .gitignore
+
+
+👤 PASO 4: CONFIGURAR AUTENTICACIÓN
+
+        4.1 Habilitar Email/Password
+            Panel izquierdo → Authentication → Providers
+            En Email:
+                ✅ Enable email sign-in
+                ❌ Disable "Confirm email" (solo para desarrollo)
+                ⚠️ En producción, SIEMPRE activar confirmación de email.
+
+        4.2 Configurar URLs de redirección (¡CRÍTICO!)
+            Ir a Authentication → URL Configuration
+            Configurar:
+
+        ------------------------------------------------------------------
+        Campo                           Valor
+        ------------------------------------------------------------------
+        Site URL                        http://localhost:5173
+
+        Additional Redirect URLs        http://localhost:5173/login
+                                        http://localhost:5173/register
+                                        http://localhost:5173/dashboard
+                                        http://localhost:5173
+
+        💡 Si usas otro puerto (ej. 3000), ajusta todas las URLs.
+
+
+🐘 PASO 5: CREAR LA BASE DE DATOS
+
+    ⚠️ Antes de ejecutar SQL: asegúrate de tener el script basededatos.txt listo con:
+        Tabla profiles (con trigger para crear perfil al registrarse)
+        Tabla tickets
+        Relaciones y políticas RLS
+
+    5.1 Abrir SQL Editor
+        Panel izquierdo → SQL Editor → New Query (basededatos.tx)
+        Pegar y ejecutar el script completo
+
+        Click en ▶ Run
+            Esperar mensaje "Success"
+            Ir a Table Editor → deben aparecer: las 5 tablas que estan en basededatos.txt
+
+
+
+🧪 PASO 6: PRUEBAS INICIALES
+
+        6.1 Crear usuario de prueba
+            Authentication → Users → Add User
+
+            Completar:
+                Email: estudiante@helpdesk.com
+                Password: estudiante123
+
+                Click en Create User
+
+6.2 Verificar en la base de datos
+
+    Ejecuta en SQL Editor:
+    -- Ver usuarios en auth
+    SELECT id, email FROM auth.users ORDER BY created_at DESC LIMIT 1;
+
+    -- Ver perfil creado automáticamente
+    SELECT id, email, role FROM profiles ORDER BY created_at DESC LIMIT 1;
+
+    ✅ Debes ver el mismo id en ambas consultas → ¡el trigger funcionó!
+
+
+
+🛡️ PASO 7 (OPCIONAL PERO RECOMENDADO): PROBAR RLS
+
+        Ejecuta esta consulta sin estar autenticado (en SQL Editor):
+        SELECT * FROM tickets;
